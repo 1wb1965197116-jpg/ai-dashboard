@@ -2,7 +2,10 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AI Control Center</title>
+<title>AI Dashboard</title>
+
+<!-- PWA Manifest -->
+<link rel="manifest" href="manifest.json">
 
 <style>
 body {
@@ -11,76 +14,32 @@ body {
     background: #0f0f0f;
     color: #fff;
 }
-
-header {
-    padding: 15px;
-    text-align: center;
-    background: #1a1a1a;
-}
-
-#auth {
-    padding: 20px;
-    text-align: center;
-}
-
-input, button {
-    padding: 10px;
-    margin: 5px;
-    background: #222;
-    color: #fff;
-    border: 1px solid #444;
-}
-
-nav {
-    display: flex;
-    justify-content: space-around;
-    background: #222;
-}
-
-nav button {
-    flex: 1;
-}
-
-section {
-    display: none;
-    padding: 15px;
-}
-
-.active {
-    display: block;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th, td {
-    border: 1px solid #444;
-    padding: 8px;
-}
-
-th {
-    background: #222;
-}
-
-img {
-    max-width: 100%;
-}
+header { padding: 15px; text-align: center; background: #1a1a1a; }
+nav { display: flex; justify-content: space-around; background: #222; padding: 10px; }
+button { flex: 1; padding: 10px; margin: 2px; background: #333; color: #fff; border: none; }
+section { display: none; padding: 15px; }
+.active { display: block; }
+input { width: 100%; padding: 10px; margin-bottom: 10px; background: #222; color: #fff; border: 1px solid #444; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #444; padding: 8px; }
+th { background: #222; }
+video, img { width: 100%; margin-top: 10px; }
 </style>
 </head>
 
 <body>
 
-<header>AI Control Center</header>
+<header>AI Control Dashboard</header>
 
+<!-- Auth Section -->
 <div id="auth">
-    <input id="email" placeholder="Email"><br>
-    <input id="password" type="password" placeholder="Password"><br>
-    <button onclick="login()">Login</button>
-    <button onclick="logout()">Logout</button>
+<input id="email" placeholder="Email"><br>
+<input id="password" type="password" placeholder="Password"><br>
+<button onclick="login()">Login</button>
+<button onclick="logout()">Logout</button>
 </div>
 
+<!-- Navigation Tabs -->
 <nav>
 <button onclick="showTab('translations')">Translations</button>
 <button onclick="showTab('ocr')">OCR</button>
@@ -88,32 +47,37 @@ img {
 <button onclick="showTab('devices')">Devices</button>
 </nav>
 
+<!-- TRANSLATIONS -->
 <section id="translations" class="active">
 <h2>Translations</h2>
+<input id="search" placeholder="Search translations...">
 <table>
-<thead><tr><th>Original</th><th>Translated</th><th>Source</th></tr></thead>
+<thead><tr><th>Original</th><th>Translated</th><th>Source</th><th>Time</th></tr></thead>
 <tbody id="translationTable"></tbody>
 </table>
 </section>
 
+<!-- OCR -->
 <section id="ocr">
 <h2>OCR Upload</h2>
 <input type="file" id="ocrUpload">
 <button onclick="uploadOCR()">Upload</button>
 <img id="preview">
 <table>
-<thead><tr><th>Text</th><th>Source</th></tr></thead>
+<thead><tr><th>Text</th><th>Source</th><th>Time</th></tr></thead>
 <tbody id="ocrTable"></tbody>
 </table>
 </section>
 
+<!-- VIDEO -->
 <section id="video">
 <h2>Video Player</h2>
-<input id="videoUrl" placeholder="Video URL">
+<input id="videoUrl" placeholder="Paste video URL">
 <button onclick="loadVideo()">Load</button>
 <video id="player" controls></video>
 </section>
 
+<!-- DEVICES -->
 <section id="devices">
 <h2>Devices</h2>
 <table>
@@ -125,110 +89,100 @@ img {
 <script type="module">
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
+/* ---------------- Supabase Setup ---------------- */
 const SUPABASE_URL = "https://vhcyulwlgekypzdbtnok.supabase.co";
 const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY";
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* AUTH */
-async function login() {
+/* ---------------- Auth ---------------- */
+window.login = async () => {
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert(error.message); else alert("Logged in");
+};
 
-    const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-    });
-
-    if (error) alert(error.message);
-    else alert("Logged in");
-}
-
-async function logout() {
+window.logout = async () => {
     await supabase.auth.signOut();
     alert("Logged out");
-}
+};
 
-/* NAV */
+/* ---------------- Navigation ---------------- */
 window.showTab = (id) => {
     document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
     document.getElementById(id).classList.add("active");
 };
 
-/* LOAD TABLES */
+/* ---------------- Load / Render Tables ---------------- */
 async function loadTranslations() {
     const { data } = await supabase.from("translations").select("*");
-    render(data, "translationTable");
+    renderTable(data, "translationTable", ["original","translated","source","created_at"]);
 }
 
 async function loadOCR() {
     const { data } = await supabase.from("ocr_logs").select("*");
-    renderOCR(data);
+    renderTable(data, "ocrTable", ["text","source","created_at"]);
 }
 
 async function loadDevices() {
     const { data } = await supabase.from("devices").select("*");
-    const tbody = document.getElementById("deviceTable");
-    tbody.innerHTML = "";
-
-    data.forEach(d => {
-        tbody.innerHTML += `<tr><td>${d.device_name}</td><td>${d.created_at}</td></tr>`;
-    });
+    renderTable(data, "deviceTable", ["device_name","created_at"]);
 }
 
-/* RENDER */
-function render(data, id) {
-    const tbody = document.getElementById(id);
+function renderTable(data, targetId, keys) {
+    const tbody = document.getElementById(targetId);
     tbody.innerHTML = "";
-
     data.forEach(r => {
-        tbody.innerHTML += `
-        <tr>
-            <td>${r.original}</td>
-            <td>${r.translated}</td>
-            <td>${r.source}</td>
-        </tr>`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = keys.map(k => `<td>${r[k] || ""}</td>`).join("");
+        tbody.appendChild(tr);
     });
 }
 
-function renderOCR(data) {
-    const tbody = document.getElementById("ocrTable");
-    tbody.innerHTML = "";
+/* ---------------- Search ---------------- */
+document.getElementById("search").addEventListener("input", async e => {
+    const query = e.target.value.toLowerCase();
+    const { data } = await supabase.from("translations").select("*");
+    const filtered = data.filter(r =>
+        (r.original || "").toLowerCase().includes(query) ||
+        (r.translated || "").toLowerCase().includes(query)
+    );
+    renderTable(filtered, "translationTable", ["original","translated","source","created_at"]);
+});
 
-    data.forEach(r => {
-        tbody.innerHTML += `
-        <tr>
-            <td>${r.text}</td>
-            <td>${r.source}</td>
-        </tr>`;
-    });
-}
-
-/* OCR UPLOAD */
-window.uploadOCR = async () => {
-    const file = document.getElementById("ocrUpload").files[0];
-    const reader = new FileReader();
-
-    reader.onload = () => {
-        document.getElementById("preview").src = reader.result;
-    };
-
-    reader.readAsDataURL(file);
-};
-
-/* VIDEO */
+/* ---------------- Video ---------------- */
 window.loadVideo = () => {
     const url = document.getElementById("videoUrl").value;
     document.getElementById("player").src = url;
 };
 
-/* REALTIME REFRESH */
-setInterval(() => {
-    loadTranslations();
-    loadOCR();
-    loadDevices();
-}, 5000);
+/* ---------------- OCR Upload Preview ---------------- */
+window.uploadOCR = () => {
+    const file = document.getElementById("ocrUpload").files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => document.getElementById("preview").src = reader.result;
+    reader.readAsDataURL(file);
+};
 
+/* ---------------- Realtime Updates ---------------- */
+supabase
+  .channel('translations')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'translations' }, payload => {
+      console.log('Change received:', payload);
+      loadTranslations();
+  })
+  .subscribe();
+
+/* ---------------- Initial Load ---------------- */
+loadTranslations();
+loadOCR();
+loadDevices();
+setInterval(() => { loadTranslations(); loadOCR(); loadDevices(); }, 5000);
+
+/* ---------------- Tampermonkey Hook Concept ---------------- */
+// Example: your Tampermonkey script can POST new translations to Supabase
+// fetch(`${SUPABASE_URL}/rest/v1/translations`, { method: 'POST', headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ original: "Hello", translated: "Hola", source: "Tampermonkey" }) })
 </script>
 
 </body>
