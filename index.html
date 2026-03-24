@@ -8,30 +8,24 @@
 <link rel="manifest" href="manifest.json">
 
 <style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #0f0f0f;
-    color: #fff;
-}
-header { padding: 15px; text-align: center; background: #1a1a1a; }
-nav { display: flex; justify-content: space-around; background: #222; padding: 10px; }
-button { flex: 1; padding: 10px; margin: 2px; background: #333; color: #fff; border: none; }
-section { display: none; padding: 15px; }
-.active { display: block; }
-input { width: 100%; padding: 10px; margin-bottom: 10px; background: #222; color: #fff; border: 1px solid #444; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border: 1px solid #444; padding: 8px; }
-th { background: #222; }
-video, img { width: 100%; margin-top: 10px; }
+body { margin:0; font-family:Arial; background:#0f0f0f; color:#fff; }
+header { padding:15px; text-align:center; background:#1a1a1a; }
+nav { display:flex; justify-content:space-around; background:#222; padding:10px; }
+button { flex:1; padding:10px; margin:2px; background:#333; color:#fff; border:none; }
+section { display:none; padding:15px; }
+.active { display:block; }
+input { width:100%; padding:10px; margin-bottom:10px; background:#222; color:#fff; border:1px solid #444; }
+table { width:100%; border-collapse:collapse; }
+th, td { border:1px solid #444; padding:8px; }
+th { background:#222; }
+video,img { width:100%; margin-top:10px; }
+#qrContainer canvas { margin-top:10px; }
 </style>
 </head>
-
 <body>
 
 <header>AI Control Dashboard</header>
 
-<!-- Auth Section -->
 <div id="auth">
 <input id="email" placeholder="Email"><br>
 <input id="password" type="password" placeholder="Password"><br>
@@ -39,12 +33,12 @@ video, img { width: 100%; margin-top: 10px; }
 <button onclick="logout()">Logout</button>
 </div>
 
-<!-- Navigation Tabs -->
 <nav>
 <button onclick="showTab('translations')">Translations</button>
 <button onclick="showTab('ocr')">OCR</button>
 <button onclick="showTab('video')">Video</button>
 <button onclick="showTab('devices')">Devices</button>
+<button onclick="showTab('qr')">QR Device Sync</button>
 </nav>
 
 <!-- TRANSLATIONS -->
@@ -86,8 +80,17 @@ video, img { width: 100%; margin-top: 10px; }
 </table>
 </section>
 
+<!-- QR DEVICE SYNC -->
+<section id="qr">
+<h2>Device QR Sync</h2>
+<input id="deviceName" placeholder="Enter device name">
+<button onclick="createDevice()">Create Device + QR</button>
+<div id="qrContainer"></div>
+</section>
+
 <script type="module">
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm";
 
 /* ---------------- Supabase Setup ---------------- */
 const SUPABASE_URL = "https://vhcyulwlgekypzdbtnok.supabase.co";
@@ -96,79 +99,60 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* ---------------- Auth ---------------- */
 window.login = async () => {
-    const email = document.getElementById("email").value;
-    const password = document.getElementById("password").value;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert(error.message); else alert("Logged in");
+    const email=document.getElementById("email").value;
+    const password=document.getElementById("password").value;
+    const { error } = await supabase.auth.signInWithPassword({email,password});
+    if(error) alert(error.message); else alert("Logged in");
 };
-
-window.logout = async () => {
-    await supabase.auth.signOut();
-    alert("Logged out");
-};
+window.logout = async () => { await supabase.auth.signOut(); alert("Logged out"); };
 
 /* ---------------- Navigation ---------------- */
-window.showTab = (id) => {
-    document.querySelectorAll("section").forEach(s => s.classList.remove("active"));
-    document.getElementById(id).classList.add("active");
-};
+window.showTab = (id) => { document.querySelectorAll("section").forEach(s=>s.classList.remove("active")); document.getElementById(id).classList.add("active"); };
 
 /* ---------------- Load / Render Tables ---------------- */
-async function loadTranslations() {
-    const { data } = await supabase.from("translations").select("*");
-    renderTable(data, "translationTable", ["original","translated","source","created_at"]);
-}
-
-async function loadOCR() {
-    const { data } = await supabase.from("ocr_logs").select("*");
-    renderTable(data, "ocrTable", ["text","source","created_at"]);
-}
-
-async function loadDevices() {
-    const { data } = await supabase.from("devices").select("*");
-    renderTable(data, "deviceTable", ["device_name","created_at"]);
-}
-
-function renderTable(data, targetId, keys) {
-    const tbody = document.getElementById(targetId);
-    tbody.innerHTML = "";
-    data.forEach(r => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = keys.map(k => `<td>${r[k] || ""}</td>`).join("");
-        tbody.appendChild(tr);
-    });
-}
+async function loadTranslations() { const { data } = await supabase.from("translations").select("*"); renderTable(data,"translationTable",["original","translated","source","created_at"]); }
+async function loadOCR() { const { data } = await supabase.from("ocr_logs").select("*"); renderTable(data,"ocrTable",["text","source","created_at"]); }
+async function loadDevices() { const { data } = await supabase.from("devices").select("*"); renderTable(data,"deviceTable",["device_name","created_at"]); }
+function renderTable(data,targetId,keys){const tbody=document.getElementById(targetId);tbody.innerHTML="";data.forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=keys.map(k=>`<td>${r[k]||""}</td>`).join("");tbody.appendChild(tr);});}
 
 /* ---------------- Search ---------------- */
 document.getElementById("search").addEventListener("input", async e => {
-    const query = e.target.value.toLowerCase();
-    const { data } = await supabase.from("translations").select("*");
-    const filtered = data.filter(r =>
-        (r.original || "").toLowerCase().includes(query) ||
-        (r.translated || "").toLowerCase().includes(query)
-    );
-    renderTable(filtered, "translationTable", ["original","translated","source","created_at"]);
+    const q=e.target.value.toLowerCase();
+    const { data }=await supabase.from("translations").select("*");
+    const filtered=data.filter(r=>(r.original||"").toLowerCase().includes(q)||(r.translated||"").toLowerCase().includes(q));
+    renderTable(filtered,"translationTable",["original","translated","source","created_at"]);
 });
 
 /* ---------------- Video ---------------- */
-window.loadVideo = () => {
-    const url = document.getElementById("videoUrl").value;
-    document.getElementById("player").src = url;
-};
+window.loadVideo = () => { document.getElementById("player").src=document.getElementById("videoUrl").value; };
 
 /* ---------------- OCR Upload Preview ---------------- */
 window.uploadOCR = () => {
-    const file = document.getElementById("ocrUpload").files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => document.getElementById("preview").src = reader.result;
+    const file=document.getElementById("ocrUpload").files[0];
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=()=>document.getElementById("preview").src=reader.result;
     reader.readAsDataURL(file);
+};
+
+/* ---------------- QR Device Sync ---------------- */
+window.createDevice = async () => {
+    const name=document.getElementById("deviceName").value;
+    const { data,error } = await supabase.from("devices").insert([{device_name:name}]).select().single();
+    if(error){ alert(error.message); return; }
+    const deviceId=data.id;
+    const qrData=JSON.stringify({supabase_url:SUPABASE_URL,device_id:deviceId});
+    const qrContainer=document.getElementById("qrContainer");
+    qrContainer.innerHTML="";
+    const canvas=document.createElement("canvas");
+    qrContainer.appendChild(canvas);
+    QRCode.toCanvas(canvas, qrData, e=>{if(e) console.error(e);});
 };
 
 /* ---------------- Realtime Updates ---------------- */
 supabase
   .channel('translations')
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'translations' }, payload => {
+  .on('postgres_changes', { event:'*', schema:'public', table:'translations' }, payload => {
       console.log('Change received:', payload);
       loadTranslations();
   })
@@ -178,12 +162,19 @@ supabase
 loadTranslations();
 loadOCR();
 loadDevices();
-setInterval(() => { loadTranslations(); loadOCR(); loadDevices(); }, 5000);
+setInterval(()=>{ loadTranslations(); loadOCR(); loadDevices(); },5000);
 
-/* ---------------- Tampermonkey Hook Concept ---------------- */
-// Example: your Tampermonkey script can POST new translations to Supabase
-// fetch(`${SUPABASE_URL}/rest/v1/translations`, { method: 'POST', headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ original: "Hello", translated: "Hola", source: "Tampermonkey" }) })
+/* ---------------- Tampermonkey Hook ---------------- */
+window.autoTranslateAndSend = function(text, translatedText=null){
+    const translated=translatedText||text;
+    let deviceConfig=JSON.parse(localStorage.getItem("deviceConfig")||"{}");
+    fetch(`${SUPABASE_URL}/rest/v1/translations`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json","apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY },
+        body: JSON.stringify({ original:text, translated, source:window.location.href, device_id:deviceConfig.device_id||null })
+    });
+};
+
 </script>
-
 </body>
 </html>
