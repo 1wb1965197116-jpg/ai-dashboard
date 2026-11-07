@@ -113,7 +113,7 @@ window.showTab = (id) => { document.querySelectorAll("section").forEach(s=>s.cla
 async function loadTranslations() { const { data } = await supabase.from("translations").select("*"); renderTable(data,"translationTable",["original","translated","source","created_at"]); }
 async function loadOCR() { const { data } = await supabase.from("ocr_logs").select("*"); renderTable(data,"ocrTable",["text","source","created_at"]); }
 async function loadDevices() { const { data } = await supabase.from("devices").select("*"); renderTable(data,"deviceTable",["device_name","created_at"]); }
-function renderTable(data,targetId,keys){const tbody=document.getElementById(targetId);tbody.innerHTML="";data.forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=keys.map(k=>`<td>${r[k]||""}</td>`).join("");tbody.appendChild(tr);});}
+function renderTable(data,targetId,keys){const tbody=document.getElementById(targetId);tbody.replaceChildren();for(const r of data||[]){const tr=document.createElement("tr");for(const k of keys){const td=document.createElement("td");td.textContent=r[k] ?? "";tr.appendChild(td);}tbody.appendChild(tr);}}
 
 /* ---------------- Search ---------------- */
 document.getElementById("search").addEventListener("input", async e => {
